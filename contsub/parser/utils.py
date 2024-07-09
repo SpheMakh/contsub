@@ -5,9 +5,7 @@ from omegaconf import OmegaConf
 from typing import Dict, Any, List
 from dataclasses import dataclass
 
-
 thisdir = os.path.dirname(__file__)
-
 
 class File(str):
     def __init__(self, path, check=True):
