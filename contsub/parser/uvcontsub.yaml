@@ -1,0 +1,46 @@
+libs:
+  spline:
+    _include: (contsub.parser.library)spline.yaml
+  polyn:
+    _include: (contsub.parser.library)polyn.yaml
+
+inputs:
+  ms:
+    info: Measurement Set
+    dtype: MS
+    must_exist: yes
+    required: yes
+    policies:
+      positional: yes
+  incol:
+    info: Name of input column
+    dtype: str
+    required: yes
+  outcol:
+    info: Mask image
+    dtype: str
+    default: CONTSUB_DATA
+  field:
+    info: Field ID
+    dtype: int
+    default: 0
+  spw:
+    info: Spectral Window ID
+    dtype: int
+    default: 0
+  weight-column:
+    info: Weight Column
+    dtype: str
+    default: WEIGHT_SPECTRUM
+    choices: [WEIGHT, WEIGHT_SPECTRUM]
+  fit-model:
+    dtype: str
+    choices:
+      - polyn
+      - spline
+      - dct
+    default: spline
+  _use:
+  - libs.spline.inputs
+outputs:
+  {}

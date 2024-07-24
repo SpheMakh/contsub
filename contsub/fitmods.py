@@ -6,8 +6,10 @@ import sys
 from scabha import init_logger
 from abc import ABC, abstractmethod
 from . import BIN
+from omegaconf import OmegaConf
 
-log = init_logger(BIN.im_plane)
+log = init_logger(BIN.main)
+
 
 class alreadyOpen(Exception):
     pass
@@ -58,7 +60,7 @@ class FitBSpline(FitFunc):
             rs = np.random.SeedSequence()
         self.rng = np.random.default_rng(rs)
         
-    def prepare(self, x, data = None, mask = None, weight = None):
+    def prepare(self, x):
         msort = np.argpartition(x, -2)
         m1l, m2l = msort[-2:]
         m1h, m2h = msort[:2]
@@ -67,27 +69,30 @@ class FitBSpline(FitFunc):
             dvh = np.abs(x[m1h]-x[m2h])/np.mean([x[m1h],x[m2h]])*3e5
             dv = (dvl+dvh)/2
             self._imax = int(len(x)/(self._velwid//dv))+1
-            log.info('nchan = {}, dv = {}, {}km/s in chans: {}, max order spline = {}'.format(len(x), dv, self._velwid, self._velwid//dv, self._imax))
+            log.debug('nchan = {}, dv = {}, {}km/s in chans: {}, max order spline = {}'.format(len(x), dv, self._velwid, self._velwid//dv, self._imax))
         else:
-            log.error('The frequency values are not changing monotonically, aborting')
-            sys.exit(1)
+            raise RuntimeError('The frequency values are not changing monotonically, aborting')
+        
             
         knotind = np.linspace(0, len(x), self._imax, dtype = int)[1:-1]
         chwid = (len(x)//self._imax)//8
         self._knots = lambda: self.rng.integers(-chwid, chwid, size = knotind.shape)+knotind
     
-    def fit(self, x, data, mask, weight):
+    def fit(self, x, data, mask=None, weight=None):
         """
         returns the spline fit and the residuals from the fit
         
         x : x values for the fit
         y : values to be fit by spline
         mask : a mask
-        weight : weights for fitting the Spline (not implemented), using mask as weight
+        weights : weights for fitting the Spline (not implemented), using mask as weight
         """
+        self.prepare(x)
         inds = self._knots()
-        # log.info(f'inds: {inds}')
-        splCfs = splrep(x, data, task = -1, w = mask, t = x[inds], k = self._order)
+        # use mask as weights if weight not set
+        if not isinstance(weight, np.ndarray):
+            weight = mask
+        splCfs = splrep(x, data, task = -1, w = weight, t = x[inds], k = self._order)
         spl = splev(x, splCfs)
         return spl, data-spl
 
@@ -137,47 +142,6 @@ class FitMedFilter(FitFunc):
         return resMed, cp_data-resMed
 
 
-class ContSub():
-    """
-    a class for performing continuum subtraction on data
-    """
-    def __init__(self, x, cube, function, mask=None):
-        """
-        each object can be initiliazed by passing a data cube, a fitting function, and a mask
-        cube : a fits cube containing the data
-        function : a fitting function should be built on FitFunc class
-        mask : a fitting mask where the pixels that should be used for fitting has a `True` value
-        """
-        self.cube = cube
-        self.function = function
-        if mask is None:
-            self.mask = None
-        else:
-            self.mask = np.array(mask, dtype = bool)
-        self.x = x
-        
-    def fitContinuum(self):
-        """
-        fits the data with the desired function and returns the continuum and the line
-        """
-        dimy, dimx = self.cube.shape[-2:]
-        cont = np.zeros(self.cube.shape)
-        line = np.zeros(self.cube.shape)
-        self.function.prepare(self.x)
-            
-        if self.mask is None:
-            for i in range(dimx):
-                for j in range(dimy):
-                    cont[:,j,i], line[:,j,i] = self.function.fit(self.x, self.cube[:,j,i], mask = None, weight = None)
-        else:
-            for i in range(dimx):
-                for j in range(dimy):
-                    cont[:,j,i], line[:,j,i] = self.function.fit(self.x, self.cube[:,j,i], mask = self.mask[:,j,i], weight = None)
-                
-            # log.info(f'row {i} is done')
-            
-        return cont, line
-                
                 
 class Mask():
     """
@@ -294,3 +258,8 @@ class ChanSigmaClip(ClipMethod):
     
     def __mad(self):
         return lambda x: np.nanmedian(np.abs(np.nanmean(x)-x), axis = (1,2))
+    
+FITFUNCS = OmegaConf.create({
+    "spline": "FitBSpline",
+    "medfilter": "FitMedFilter",
+})

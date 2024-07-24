@@ -7,7 +7,8 @@ import glob
 import os
 from contsub import BIN
 from contsub.cubes import RCube, FitsHeader
-from contsub.imcontsub import FitBSpline, ContSub, Mask, PixSigmaClip
+from contsub.fitmods import FitBSpline, Mask, PixSigmaClip
+from contsub.implane import ContSub
 from scabha import init_logger
 import astropy.io.fits as fitsio
 import numpy as np

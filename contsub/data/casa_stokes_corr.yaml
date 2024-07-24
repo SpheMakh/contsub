@@ -1,34 +1,35 @@
 STOKES_MAP: 
-    0  : "Undefined" 
-    1  : "I" 
-    2  : "Q" 
-    3  : "U" 
-    4  : "V" 
-    5  : "RR" 
-    6  : "RL" 
-    7  : "LR" 
-    8  : "LL" 
-    9  : "XX" 
-    10 : "XY" 
-    11 : "YX" 
-    12 : "YY" 
-    13 : "RX" 
-    14 : "RY" 
-    15 : "LX" 
-    16 : "LY" 
-    17 : "XR" 
-    18 : "XL" 
-    19 : "YR" 
-    20 : "YL" 
-    21 : "PP" 
-    22 : "PQ" 
-    23 : "QP" 
-    24 : "QQ" 
-    25 : "RCircular" 
-    26 : "LCircular" 
-    27 : "Linear" 
-    28 : "Ptotal" 
-    29 : "Plinear" 
-    30 : "PFtotal" 
-    31 : "PFlinear" 
-    32 : "Pangle" 
+  Undefined: 0  
+  I: 1 
+  Q: 2 
+  U: 3 
+  V: 4 
+  RR: 5 
+  RL: 6 
+  LR: 7 
+  LL: 8 
+  XX: 9 
+  XY: 10
+  YX: 11
+  YY: 12
+  RX: 13
+  RY: 14
+  LX: 15
+  LY: 16
+  XR: 17
+  XL: 18
+  YR: 19
+  YL: 20
+  PP: 21
+  PQ: 22
+  QP: 23
+  QQ: 24
+  RCircular: 25
+  LCircular: 26
+  Linear: 27
+  Ptotal: 28
+  Plinear: 29
+  PFtotal: 30
+  PFlinear: 31
+  Pangle: 32
+
