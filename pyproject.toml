@@ -12,6 +12,7 @@ numpy = "^1.22.4"
 astropy = "^6.0.0"
 scipy = "^1.12.0"
 dask-ms = "^0.2.20"
+tdqm = "*"
 stimela = {git = "https://github.com/caracal-pipeline/stimela.git", branch="master"}
 
 [tool.poetry.scripts]
@@ -23,7 +24,6 @@ optional = true
 [tool.poetry.group.tests.dependencies]
 pytest = "^7.1.3"
 flake8 = "*"
-
 
 [tool.poetry.group.dev]
 optional = true

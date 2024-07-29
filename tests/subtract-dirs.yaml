@@ -1,0 +1,7 @@
+centre: yes # include phase centre
+relative: yes # Assume directions are relative to the field centre 
+directions:
+- [0.5deg, 0.5deg]
+- [-0.5deg, 0.5deg]
+- [0.5deg, -0.5deg]
+- [-0.5deg, -0.5deg]

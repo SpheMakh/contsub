@@ -33,14 +33,27 @@ inputs:
     dtype: str
     default: WEIGHT_SPECTRUM
     choices: [WEIGHT, WEIGHT_SPECTRUM]
-  fit-model:
-    dtype: str
-    choices:
-      - polyn
-      - spline
-      - dct
-    default: spline
-  _use:
-  - libs.spline.inputs
+  chunks:
+    info: Row chunks
+    dtype: int
+    default: 10000
+  freq-mask:
+    info: Frequency axis mask. Must be a numpy '.npy' or '.npz' file. These flags will be combine with the MS flags in the FLAG column.
+    dtype: File
+  freq-mask-key:
+    info: Mask key value. If mask is a compressed numpy file (.npz) and mask key is not the default value 'arr_0'.
+    default: arr_0
+  subtract-dirs:
+    info: File containing configuration of directions to subtract from. The data will be phase shifted to each direction, then a smooth continuum profile will be subtracted.
+    dtype: File
+  order:
+    info: Order of spline
+    dtype: int
+    default: 3
+  segments: 
+    info: Width of spline segments in km/s.
+    dtype: float
+    default: 1500
+  
 outputs:
   {}
