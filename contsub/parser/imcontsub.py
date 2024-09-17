@@ -49,7 +49,7 @@ def runit(**kwargs):
     else:
         dslice = slice(None)
         
-    if len(opts.order) != len(opts.segments):
+    if len(opts.orders) != len(opts.segments):
         raise RuntimeError("The --order and --segments lists must be the size.")
     niter = len(opts.segments)
     # get Fits image cube primary HDU
@@ -73,23 +73,32 @@ def runit(**kwargs):
             mask = ~np.array(mask, dtype=bool)
         nomask = False
         
+    prevmask = 0
     for i in range(niter):
         
-        fitfunc = FitBSpline(*[opts.order[i], opts.segments[i]])
-        if nomask:
-            if i == 0:
+        fitfunc = FitBSpline(*[opts.orders[i], opts.segments[i]])
+        if i == 0:
+            if nomask:
                 log.info(f'Creating initial mask from input image')
                 contsub = ContSub(freqs, cube, fitfunc)
                 cont, line = contsub.fitContinuum()
             
-            #create mask from line emission of first iteration
-            clip = PixSigmaClip(opts.sigma_clip[i])
+                #create mask from line emission of first iteration
+                clip = PixSigmaClip(opts.sigma_clips[i])
+                mask = Mask(clip).getMask(line)
+            else:
+                log.info(f'Running iteration {i+1}')
+                constsub = ContSub(freqs, cube, fitfunc, mask)
+                #do the fitting
+                cont, line = constsub.fitContinuum()
+        else:
+            clip = PixSigmaClip(opts.sigma_clips[i])
             mask = Mask(clip).getMask(line)
             
-        log.info(f'Running iteration {i+1}')
-        constsub = ContSub(freqs, cube, fitfunc, mask)
-        #do the fitting
-        cont, line = constsub.fitContinuum()
+            constsub = ContSub(freqs, cube, fitfunc, mask)
+            #do the fitting
+            cont, line = constsub.fitContinuum()
+        
     log.info("Continuum fitting successful. Ready to write output products.")
         
 

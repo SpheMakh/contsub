@@ -19,9 +19,15 @@ inputs:
     info: Mask image
     dtype: File
     must_exist: true
-  sigma-clip:
+  niter:
+    info: Number of iterations
+    default: 3
+    dtype: int
+  sigma-clips:
     info: Sigma clip for each iteration. Only required if mask-image is not given.
     dtype: List[float]
+    policies:
+      repeat: "[]"
     default:
     - 5
     - 4

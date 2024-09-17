@@ -1,8 +1,8 @@
 libs:
   spline:
     _include: (contsub.parser.library)spline.yaml
-  polyn:
-    _include: (contsub.parser.library)polyn.yaml
+  medfilter:
+    _include: (contsub.parser.library)medfilter.yaml
 
 inputs:
   ms:
@@ -30,30 +30,74 @@ inputs:
     default: 0
   weight-column:
     info: Weight Column
+    abbreviation: wc
     dtype: str
     default: WEIGHT_SPECTRUM
     choices: [WEIGHT, WEIGHT_SPECTRUM]
+  correlations:
+    info: correlation indices
+    dtype: List[int]
+    policies:
+      repeat: "[]"
+    default: [0,-1]
   chunks:
     info: Row chunks
     dtype: int
-    default: 10000
+    default: 50000
+  time-chunks:
+    info: Time chunks in time intervals
+    dtype: int
+    default: 100
+  baseline-chunks:
+    info: baseline chunks
+    dtype: int
+    default: 5000
   freq-mask:
     info: Frequency axis mask. Must be a numpy '.npy' or '.npz' file. These flags will be combine with the MS flags in the FLAG column.
+    abbreviation: fm
     dtype: File
   freq-mask-key:
     info: Mask key value. If mask is a compressed numpy file (.npz) and mask key is not the default value 'arr_0'.
+    abbreviation: fmk
     default: arr_0
   subtract-dirs:
     info: File containing configuration of directions to subtract from. The data will be phase shifted to each direction, then a smooth continuum profile will be subtracted.
+    abbreviation: sd
     dtype: File
-  order:
-    info: Order of spline
+  niter:
+    info: Number of iterations
     dtype: int
     default: 3
-  segments: 
-    info: Width of spline segments in km/s.
+  sigma-clip:
+    info: Clipping threshold in noise stddev
+    abbreviation: sc
+    dtype: List[float]
+    policies:
+      repeat: "[]"
+    default: [8,5,4]
+  spline-order:
+    info: Order of spline for fit
+    abbreviation: so
+    dtype: List[int]
+    policies:
+      repeat: "[]"
+    default: [3]
+  spline-segment:
+    info: Width of spline segments in km/s
+    abbreviation: ssw
+    dtype: List[float]
+    policies:
+      repeat: "[]"
+    default: [1500]
+  filter-width:
+    info: Median filter width in km/s
+    abbreviation: fw
     dtype: float
-    default: 1500
-  
+    policies:
+      repeat: "[]"
+  subtract-col-first:
+    info: Subtract this column from --incol before perfoming the continuum subtraction. For example, if you want to perform continuum subtraction on the clean residual data you can set this to 'MODEL_DATA', and if --incol is set to DATA, the continnum subtraction will be done on the residual 'DATA - MODEL_DATA'
+    abbreviation: scf
+    dtype: str
 outputs:
   {}

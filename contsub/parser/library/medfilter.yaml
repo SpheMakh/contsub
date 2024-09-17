@@ -1,0 +1,9 @@
+inputs:
+  filter-widths:
+    info: Width of filter in km/s
+    dtype: List[float]
+    policies:
+      repeat: "[]"
+    default: null
+outputs:
+  {}

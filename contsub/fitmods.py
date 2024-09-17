@@ -7,6 +7,10 @@ from scabha import init_logger
 from abc import ABC, abstractmethod
 from . import BIN
 from omegaconf import OmegaConf
+from typing import List
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.pyplot as plt
 
 log = init_logger(BIN.main)
 
@@ -73,7 +77,6 @@ class FitBSpline(FitFunc):
         else:
             raise RuntimeError('The frequency values are not changing monotonically, aborting')
         
-            
         knotind = np.linspace(0, len(x), self._imax, dtype = int)[1:-1]
         chwid = (len(x)//self._imax)//8
         self._knots = lambda: self.rng.integers(-chwid, chwid, size = knotind.shape)+knotind
@@ -117,9 +120,9 @@ class FitMedFilter(FitFunc):
             self._imax = int(self._velwid//dv)
             if self._imax %2 == 0:
                 self._imax += 1
-            print('len(x) = {}, dv = {}, {}km/s in chans: {}'.format(len(x), dv, self._velwid, self._velwid//dv))
+            log.debug('len(x) = {}, dv = {}, {}km/s in chans: {}'.format(len(x), dv, self._velwid, self._velwid//dv))
         else:
-            log.debug('probably x values are not changing monotonically, aborting')
+            log.info('probably x values are not changing monotonically, aborting')
             sys.exit(1)
             
     
@@ -142,7 +145,6 @@ class FitMedFilter(FitFunc):
         return resMed, cp_data-resMed
 
 
-                
 class Mask():
     """
     mask class creates a mask using a specific masking method
@@ -263,3 +265,28 @@ FITFUNCS = OmegaConf.create({
     "spline": "FitBSpline",
     "medfilter": "FitMedFilter",
 })
+
+
+def iterative_clip(data:np.ndarray, clips:List[float]=[8,5,4]) -> np.ndarray:
+    """AI is creating summary for iterative_clip
+
+    Args:
+        data ([type]): [description]
+        clips (List[float], optional): [description]. Defaults to [8,5,4].
+    """
+    for clip in clips:
+        mean = np.nanmean(data)
+        median = np.nanmedian(data)
+        sigma = np.nanmedian( np.absolute(mean - data) )
+        thresh = median + sigma*clip
+        mask = np.absolute(data) > thresh 
+
+    return mask
+
+
+def padit(niter, vals):
+    nvals = len(vals)
+    if nvals < niter:
+        return np.pad(vals, (0,niter - nvals), mode="edge")
+    else:
+        return vals[:niter]

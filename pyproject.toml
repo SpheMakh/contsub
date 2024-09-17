@@ -11,7 +11,7 @@ python = ">=3.9,<3.13"
 numpy = "^1.22.4"
 astropy = "^6.0.0"
 scipy = "^1.12.0"
-dask-ms = "^0.2.20"
+dask-ms = {version="^0.2.20", extras=["xarray"]}
 tdqm = "*"
 stimela = {git = "https://github.com/caracal-pipeline/stimela.git", branch="master"}
 
