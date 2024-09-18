@@ -67,7 +67,7 @@ inputs:
   niter:
     info: Number of iterations
     dtype: int
-    default: 3
+    default: 1
   sigma-clip:
     info: Clipping threshold in noise stddev
     abbreviation: sc
@@ -75,6 +75,24 @@ inputs:
     policies:
       repeat: "[]"
     default: [8,5,4]
+  arpls_ratio:
+    info: ratio
+    dtype: List[float]
+    policies:
+      repeat: "[]"
+    default: [1e-6]
+  arpls_lam:
+    info: Lam
+    dtype: List[float]
+    policies:
+      repeat: "[]"
+    default: [400]
+  arpls_niter:
+    info: iterations
+    dtype: List[int]
+    policies:
+      repeat: "[]"
+    default: [3]
   spline-order:
     info: Order of spline for fit
     abbreviation: so

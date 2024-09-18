@@ -8,9 +8,17 @@ from abc import ABC, abstractmethod
 from . import BIN
 from omegaconf import OmegaConf
 from typing import List
-import matplotlib
-matplotlib.use('agg')
-import matplotlib.pyplot as plt
+
+from scipy import sparse
+from scipy.sparse import linalg
+import numpy as np
+from numpy.linalg import norm
+from dataclasses import dataclass
+from scipy.interpolate import make_smoothing_spline
+
+np.seterr(all='raise') 
+
+
 
 log = init_logger(BIN.main)
 
@@ -260,7 +268,76 @@ class ChanSigmaClip(ClipMethod):
     
     def __mad(self):
         return lambda x: np.nanmedian(np.abs(np.nanmean(x)-x), axis = (1,2))
+
+
+def baseline_arPLS(data, ratio=1e-6, lam=100, niter=10, weights=None, full_output=False):
+    size = len(data)
+
+    diag = np.ones(size - 2)
+    D = sparse.spdiags([diag, -2*diag, diag], [0, -1, -2], size, size - 2)
+
+    H = lam * D.dot(D.T)  # The transposes are flipped w.r.t the Algorithm on pg. 252
+
+    if not isinstance(weights, np.ndarray):
+        weights = np.ones_like(data)
+        
+    weights_mat = sparse.spdiags(weights, 0, size, size)
+
+    crit = 1
+    count = 0
+    sigma, mean = 1,1
+    while crit > ratio:
+        bsln = linalg.spsolve(weights_mat + H, weights_mat * data)
+        resid = data - bsln
+        dn = resid[resid < 0]
+
+        mean = np.mean(dn)
+        sigma = np.std(dn)
+        
+        w_new = 1 / (1 + np.exp(2 * (resid - (2*sigma - mean))/sigma))
+        
+        crit = norm(w_new - weights) / norm(weights)
+            
+
+        weights = w_new
+        weights_mat.setdiag(weights)  # Do not create a new matrix, just update diagonal values
+
+        count += 1
+
+        if count > niter:
+            log.debug('Maximum number of iterations exceeded')
+            break
+
+    if full_output:
+        info = {'num_iter': count, 'stop_criterion': crit}
+        return bsln, resid, info
+    else:
+        return bsln
+
+@dataclass
+class FitArPLS:
+    ratio:float = 1e-6
+    lam:float = 400
+    niter:int = 10
     
+    def fit(self, freqs, data, mask=None, weight=None):
+        if not isinstance(weight, np.ndarray):
+            weight = np.ones_like(freqs)
+            
+        if not isinstance(mask, np.ndarray):
+            mask = np.zeros_like(freqs, dtype=bool)
+            smooth_data = data
+        else:   
+            smooth_data = make_smoothing_spline(freqs[~mask], data[~mask],
+                                        w=weight[~mask])(freqs)
+            
+        weight[mask] = 0.0 
+        baseline = baseline_arPLS(smooth_data, ratio=self.ratio,
+                                lam=self.lam, niter=self.niter, weights=weight)
+        
+        return baseline, data - baseline
+
+
 FITFUNCS = OmegaConf.create({
     "spline": "FitBSpline",
     "medfilter": "FitMedFilter",

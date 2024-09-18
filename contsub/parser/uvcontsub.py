@@ -44,11 +44,13 @@ def runit(**kwargs):
         mask = None
     
     fitopts = {
-        "funcname": "spline",
+        "funcname": "arpls",
+        "arpls_ratio": opts.arpls_ratio,
+        "arpls_lam": opts.arpls_lam,
+        "arpls_niter": opts.arpls_niter,
         "spline_order": opts.spline_order,
         "spline_segment": opts.spline_segment,
         "sigma_clip": opts.sigma_clip,
-        "xvar": None,
         "filter_width": opts.filter_width,
         "mask": mask,
         "niter": opts.niter
