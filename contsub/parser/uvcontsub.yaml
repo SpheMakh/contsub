@@ -44,14 +44,13 @@ inputs:
     info: Row chunks
     dtype: int
     default: 50000
-  time-chunks:
-    info: Time chunks in time intervals
-    dtype: int
-    default: 100
-  baseline-chunks:
-    info: baseline chunks
-    dtype: int
-    default: 5000
+  auto-mask:
+    info: Generate mask from data
+    dtype: bool
+    default: yes
+  save-mask:
+    info: File name to save mask to (.npy)
+    dtype: File
   freq-mask:
     info: Frequency axis mask. Must be a numpy '.npy' or '.npz' file. These flags will be combine with the MS flags in the FLAG column.
     abbreviation: fm
@@ -75,24 +74,17 @@ inputs:
     policies:
       repeat: "[]"
     default: [8,5,4]
-  arpls_ratio:
-    info: ratio
-    dtype: List[float]
-    policies:
-      repeat: "[]"
-    default: [1e-6]
-  arpls_lam:
-    info: Lam
-    dtype: List[float]
-    policies:
-      repeat: "[]"
-    default: [400]
-  arpls_niter:
-    info: iterations
+  fitfunc:
+    info: Fit function
+    dtype: str
+    default: spline
+    choices: [spline,arpls]
+  dilate:
+    info: Dilate mask
     dtype: List[int]
+    default: [3]
     policies:
       repeat: "[]"
-    default: [3]
   spline-order:
     info: Order of spline for fit
     abbreviation: so

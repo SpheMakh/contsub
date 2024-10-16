@@ -43,30 +43,26 @@ def runit(**kwargs):
     else:
         mask = None
     
-    fitopts = {
-        "funcname": "arpls",
-        "arpls_ratio": opts.arpls_ratio,
-        "arpls_lam": opts.arpls_lam,
-        "arpls_niter": opts.arpls_niter,
+    fitopts = OmegaConf.create({
+        "funcname": opts.fitfunc,
         "spline_order": opts.spline_order,
         "spline_segment": opts.spline_segment,
         "sigma_clip": opts.sigma_clip,
         "filter_width": opts.filter_width,
-        "mask": mask,
-        "niter": opts.niter
-    }
+        "dilate": opts.dilate,
+        "niter": opts.niter,
+    })
     
     chunks = OmegaConf.create({
         "row": opts.chunks,
-        "time": opts.time_chunks,
-        "baseline": opts.baseline_chunks 
     })
     
     
     ms_subtract(ms, incol=opts.incol, outcol=opts.outcol, field=opts.field,
                 spwid=opts.spw, weight_column=opts.weight_column,
                 fitopts=fitopts, subtract_dirs=opts.subtract_dirs, chunks=chunks,
-                subtract_col_first=opts.subtract_col_first, corrs=opts.correlations)
+                subtract_col_first=opts.subtract_col_first, corrs=opts.correlations,
+                mask=mask, automask=opts.auto_mask, save_mask=opts.save_mask)
     
     
     

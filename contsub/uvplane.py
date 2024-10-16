@@ -1,12 +1,11 @@
 import os
-import dask
 import dask.array as da
 from daskms import xds_from_ms, xds_to_table, xds_from_table
 from typing import Dict, Union, List
 from scabha.basetypes import File, MS
 from omegaconf import OmegaConf
 import numpy as np
-from contsub import fitmods, BIN
+from contsub import fitmods, BIN, utils
 from contsub.utils import radec2lm, direction_rad
 from scabha import init_logger
 from tqdm.dask import TqdmCallback
@@ -17,19 +16,34 @@ thisdir = os.path.dirname(__file__)
 
 log = init_logger(BIN.uv_plane)
 
+
+class PhaseRot():
+    def __init__(self, uvw:np.ndarray, freqs:np.ndarray):
+        self.freqs = freqs
+        self.uvw = uvw.T[...,None] * freqs / 2.9979e8
+    
+    def rotate_to(self, vis, ell, emm, derotate=False):
+        nterm = np.sqrt(1 - ell*ell - emm*emm)
+        shift = self.uvw[0]*ell + self.uvw[1]*emm + self.uvw[2]*nterm
+        
+        if derotate:
+            sign = 1
+        else:
+            sign = -1
+    
+        return vis * np.exp(sign*1j * shift[...,None])
+        
+    
 class UVContSub(object):
     def __init__(self, data:np.ndarray, 
                 freqs: np.ndarray,
-                uvw:np.ndarray,
                 flags:np.ndarray,
                 weights:np.ndarray,
-                times:np.ndarray,
-                ant1:np.ndarray,
-                ant2:np.ndarray,
                 corrs:List[int],
-                fitopts:Dict, 
-                directions_info:Dict,
-                return_continuum=False) -> int:
+                fitopts:Dict,
+                return_continuum=False,
+                usermask:np.ndarray=None,
+                ) -> int:
         """AI is creating summary for __init__
 
         Args:
@@ -38,8 +52,6 @@ class UVContSub(object):
             corrs (List[int]): [description]
             flags (np.ndarray): [description]
             weights (np.ndarray, optional): [description]. Defaults to None.
-            directions_info (Dict, optional): [description]. Defaults to None.
-            uvw (np.ndarray, optional): [description]. Defaults to None.
         """
         
         self.data = data
@@ -49,50 +61,27 @@ class UVContSub(object):
         # set fit params from fitopts
         self.funcname = fitopts["funcname"]
         self.sigma_clips = fitopts["sigma_clip"]
-        for param in "filter_width spline_segment spline_order arpls_ratio arpls_lam arpls_niter".split():
+        for param in "filter_width spline_segment spline_order dilate".split():
             vals = fitopts.get(param, None)
             if vals:
                 setattr(self, param, fitmods.padit(self.niter, vals))
             else:
                 setattr(self, param, None)
-        self.usermask = fitopts["mask"]
+        self.usermask = usermask
         self.freqs = freqs
         self.corrs = corrs
         self.flags = flags
         self.weights = weights
         self.chanweights = len(weights.shape) == 3
-        self.directions_info = directions_info
-        self.uvw = uvw
         self.residual = None
         self.continuum = None
-        self.ant1 = ant1
-        self.ant2 = ant2
-        self.times = times
         self.return_continuum = return_continuum
     
-    def get_bta_mask(self, corr, dilate=3):
-        # time averages for each baseline (aka, baseline time averages)
-        data = self.data[...,corr].real
-        flags = self.flags[...,corr]
-        mdata = ma.array(data, mask=flags)
-        mask = fitmods.iterative_clip(ma.mean(mdata, axis=0).data, self.sigma_clips)
-        if dilate:
-            mask = binary_dilation(mask, iterations=dilate)
-            
-        rnd = "".join(map(str, np.random.randint(1,9,4)))
-        with open(f"btamask_{rnd}.npy", "wb") as stdw:
-            np.save(stdw, mask)
-            
-        return mask
-        
     def get_spline_func(self, order, segment, **kw):
         return fitmods.FitBSpline(order, segment, **kw)
         
     def get_medfilter_func(self, filter_width, **kw):
         return fitmods.FitMedFilter(filter_width, **kw)
-    
-    def get_arpls_func(self, ratio, lam, niter, **kw):
-        return fitmods.FitArPLS(ratio, lam, niter, **kw)
     
     def fit_iter(self, profile:np.ndarray, iter:int,
                  weights:np.ndarray=None, mask:np.ndarray=None, **kw):
@@ -101,9 +90,6 @@ class UVContSub(object):
                                            self.spline_segment[iter], **kw)
         elif self.funcname == "medfilter":
             fitfunc = self.get_spline_func(self.filter_width[iter], **kw)
-        elif self.funcname == "arpls":
-            fitfunc = self.get_arpls_func(self.arpls_ratio[iter],
-                                        self.arpls_lam[iter], self.arpls_niter[iter])
         else:
             raise RuntimeError(f"Requested continnum fit function '{self.funcname}' is not supported.")
         
@@ -114,59 +100,86 @@ class UVContSub(object):
         
         residual = line_real + 1j*line_imag
         return residual
-
     
     def fitall(self):
         residual = np.zeros_like(self.data)
-        pid = os.getpid()
-        log.info(f"Ingesting new chuck: PID={pid} ")
+        pid = str(id(os.getpid()))[5:]
         for corr in self.corrs:
-            avg_mask = self.get_bta_mask(corr=corr)
+            log.info(f"Processing chuck: ID={pid}, corr={corr}")
             for row in range(self.nrow):
                 slc = row, slice(None), corr
                 profile = self.data[slc]
                 rowflags = self.flags[slc]
                 if self.chanweights:
-                    roweights = self.weights[row]
+                    roweights = self.weights[slc]
                 else:
                     roweights = np.ones_like(self.freqs)
-                mask = rowflags | avg_mask
+                    
+                mask = rowflags | self.usermask
                 for iter in range(self.niter):
                     profile = self.fit_iter(profile, iter, weights=roweights, mask=mask)
                 
                 residual[slc] = profile
-        log.info(f"Finished processing chunk: PID={pid} ")
+            log.info(f"Finished processing chunk: ID={pid}, corr={corr}")
+            
         return  residual
         
 
 def uv_subtract(data:np.ndarray, freqs: np.ndarray, 
                 uvw:np.ndarray, flags:np.ndarray, 
-                weights:np.ndarray, times:np.ndarray,
-                ant1:np.ndarray, ant2:np.ndarray, corrs: List[int],
-                fitopts:Dict, directions_info:Dict = None):
-    
-    #TODO(Sphe)
-    # Add phase rotation stuff to this function)
-    
+                weights:np.ndarray, corrs: List[int],
+                fitopts:Dict, directions_info:Dict = None, mask=None):
+   
     uvsub = UVContSub(data, freqs,
-                uvw,
-                flags,
-                weights,
-                times,
-                ant1,
-                ant2,
-                corrs,
-                fitopts,
-                directions_info,
-                )
+         flags,
+         weights,
+         corrs,
+         fitopts,
+         usermask=mask,
+     )
+
+    vis = uvsub.fitall()
+    if directions_info:
+        phaserots = PhaseRot(uvw=uvw, freqs=freqs)
+        for ell, emm in directions_info["directions"]:
+            log.info(f"Phase shifting to new direction")
+            vis = phaserots.rotate_to(vis, ell, emm) 
+            uvsub = UVContSub(vis, freqs,
+                    flags,
+                    weights,
+                    corrs,
+                    fitopts,
+                    usermask=mask,
+                    )
+            vis = uvsub.fitall()
+            log.info("Rotating data back to the phase centre")
+            vis = phaserots.rotate_to(vis, ell, emm, derotate=True)
+            
+    return vis
+
+def get_amp_freq(data, flags):
+    if isinstance(data, (tuple,list)):
+        data = data[0]
+        flags = flags[0]
+     
+    data = np.abs(np.squeeze(data))
+    mdata = ma.masked_array(data, mask=np.squeeze(flags))
     
-    return uvsub.fitall()
+    ndim = len(data.shape)
+    if ndim == 3:
+        axes = (2,0)
+    else:
+        axes = 0
+    
+    data = ma.sum(mdata, axis=axes).data
+    return data
 
 
 def ms_subtract(ms: MS, incol:str, outcol:str, field:Union[str,int] = 0, spwid:int = 0, 
                 corrs:List[int] = [0,-1],
                 weight_column:str = "WEIGHT_SPECTRUM", fitopts:Dict = None,
-                subtract_dirs:File = None, chunks=None, subtract_col_first=None):
+                subtract_dirs:File = None, chunks=None, subtract_col_first=None,
+                mask=None, automask=True, save_mask=None):
     """_summary_
 
     Args:
@@ -178,6 +191,7 @@ def ms_subtract(ms: MS, incol:str, outcol:str, field:Union[str,int] = 0, spwid:i
     fields = list(field_ds.NAME.data.compute())
     
     spwds = xds_from_table(f"{ms}::SPECTRAL_WINDOW")[0]
+    freqs = spwds.CHAN_FREQ.data[spwid].compute()
     # get frequencies and convert to MHz
     directions_dict = None
     if subtract_dirs:
@@ -202,11 +216,37 @@ def ms_subtract(ms: MS, incol:str, outcol:str, field:Union[str,int] = 0, spwid:i
     elif isinstance(field, int):
         field = field
         
+    corrs = corrs
+        
     ms_dsl = xds_from_ms(ms, group_cols=["FIELD_ID", "DATA_DESC_ID"],
                         index_cols=["TIME", "ANTENNA1", "ANTENNA2"],
                         chunks={"row": chunks.row})
     
     base_dims = ("row", "chan", "corr")
+    
+    if automask:
+        log.info("Creating mask from the data.")
+        results = []
+        for ds in ms_dsl:
+            result = da.blockwise(get_amp_freq, ("chan",),
+                            ds.DATA.data, base_dims,
+                            ds.FLAG.data, base_dims,
+                            dtype=np.ndarray)
+            results.append(result)
+        
+        with TqdmCallback(desc="make mask"):
+            amp_freqs = np.array(da.compute(results))
+        amp_freqs = np.squeeze(amp_freqs)
+        
+        spline = fitmods.FitBSpline(fitopts.spline_order[-1], fitopts.spline_segment[-1])
+        _, line = spline.fit(freqs, amp_freqs, weight=np.ones_like(freqs))
+        
+        mask = fitmods.iterative_clip(line, clips=fitopts.sigma_clip)
+        if fitopts.dilate:
+            mask = binary_dilation(mask, iterations=fitopts.dilate[-1])
+        if save_mask:
+            np.save(save_mask, mask)
+            log.info(f"Mask saved as '{save_mask}' ")
     
     if weight_column == "WEIGHT_SPECTRUM":
         if not hasattr(ms_dsl[0], "WEIGHT_SPECTRUM"):
@@ -216,10 +256,8 @@ def ms_subtract(ms: MS, incol:str, outcol:str, field:Union[str,int] = 0, spwid:i
         if not hasattr(ms_dsl[0], "WEIGHT"):
             raise ValueError("Input MS doesn't have a WEIGHT column")
         weight_dims = "row", "corr"
-    
-    
+
     residuals = []
-    log.info(f"Ready to process with row chunks: {ms_dsl[0].chunks['row']}")  
     
     for ds in ms_dsl: 
 
@@ -234,12 +272,10 @@ def ms_subtract(ms: MS, incol:str, outcol:str, field:Union[str,int] = 0, spwid:i
                                 ds.UVW.data, ("row", "uvw"),
                                 ds.FLAG.data, base_dims,
                                 getattr(ds, weight_column).data, weight_dims,
-                                ds.TIME.data, ("row",),
-                                ds.ANTENNA1.data, ("row",),
-                                ds.ANTENNA2.data, ("row",),
                                 corrs, None,
                                 fitopts, None,
                                 directions_dict, None,
+                                mask, ("chan",),
                                 dtype=data.dtype, concatenate=True,
                                 )
         
@@ -259,4 +295,5 @@ def ms_subtract(ms: MS, incol:str, outcol:str, field:Union[str,int] = 0, spwid:i
     log.info("\n Continuum subtraction finished without errors.\n ")
     
     return 0
-    
+
+ 

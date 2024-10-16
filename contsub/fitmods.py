@@ -289,10 +289,10 @@ def baseline_arPLS(data, ratio=1e-6, lam=100, niter=10, weights=None, full_outpu
     while crit > ratio:
         bsln = linalg.spsolve(weights_mat + H, weights_mat * data)
         resid = data - bsln
-        dn = resid[resid < 0]
+        #dn = resid[resid < 0]
 
-        mean = np.mean(dn)
-        sigma = np.std(dn)
+        mean = np.mean(data)
+        sigma = np.std(data)
         
         w_new = 1 / (1 + np.exp(2 * (resid - (2*sigma - mean))/sigma))
         
@@ -317,8 +317,8 @@ def baseline_arPLS(data, ratio=1e-6, lam=100, niter=10, weights=None, full_outpu
 @dataclass
 class FitArPLS:
     ratio:float = 1e-6
-    lam:float = 400
-    niter:int = 10
+    lam:float = 1e3
+    niter:int = 4
     
     def fit(self, freqs, data, mask=None, weight=None):
         if not isinstance(weight, np.ndarray):
@@ -326,13 +326,9 @@ class FitArPLS:
             
         if not isinstance(mask, np.ndarray):
             mask = np.zeros_like(freqs, dtype=bool)
-            smooth_data = data
-        else:   
-            smooth_data = make_smoothing_spline(freqs[~mask], data[~mask],
-                                        w=weight[~mask])(freqs)
             
         weight[mask] = 0.0 
-        baseline = baseline_arPLS(smooth_data, ratio=self.ratio,
+        baseline = baseline_arPLS(data, ratio=self.ratio,
                                 lam=self.lam, niter=self.niter, weights=weight)
         
         return baseline, data - baseline
@@ -351,12 +347,14 @@ def iterative_clip(data:np.ndarray, clips:List[float]=[8,5,4]) -> np.ndarray:
         data ([type]): [description]
         clips (List[float], optional): [description]. Defaults to [8,5,4].
     """
+    mask = np.zeros_like(data, dtype=bool)
     for clip in clips:
         mean = np.nanmean(data)
         median = np.nanmedian(data)
         sigma = np.nanmedian( np.absolute(mean - data) )
         thresh = median + sigma*clip
-        mask = np.absolute(data) > thresh 
+        mask = mask | (np.absolute(data) > thresh)
+        data[mask] = np.nan
 
     return mask
 
